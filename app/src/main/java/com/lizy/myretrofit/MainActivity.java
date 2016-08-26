@@ -1,4 +1,4 @@
-package com.lizy.myretroyfit;
+package com.lizy.myretrofit;
 
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;

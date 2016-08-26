@@ -1,4 +1,4 @@
-package com.lizy.myretroyfit;
+package com.lizy.myretrofit;
 
 import org.junit.Test;
 

@@ -1,4 +1,4 @@
-package com.lizy.myretroyfit;
+package com.lizy.myretrofit;
 
 import android.app.Application;
 import android.test.ApplicationTestCase;
