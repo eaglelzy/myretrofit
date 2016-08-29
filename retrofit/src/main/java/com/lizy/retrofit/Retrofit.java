@@ -13,6 +13,10 @@ import java.util.Map;
 
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
+import okhttp3.RequestBody;
+import okhttp3.ResponseBody;
+
+import static com.lizy.retrofit.Utils.checkNotNull;
 
 /**
  * Created by lizy on 16-8-26.
@@ -24,13 +28,16 @@ public class Retrofit {
     private final Map<Method, ServiceMethod> serviceMethodMap = new LinkedHashMap<>();
 
     private final List<CallAdapter.Factory> adapterFactories;
+    private final List<Converter.Factory> converterFactories;
 
     Retrofit(okhttp3.Call.Factory callFactory,
              HttpUrl baseUrl,
-             List<CallAdapter.Factory> adapterFactories) {
+             List<CallAdapter.Factory> adapterFactories,
+             List<Converter.Factory> converterFactories) {
         this.callFactory = callFactory;
         this.baseUrl = baseUrl;
         this.adapterFactories = Collections.unmodifiableList(adapterFactories);
+        this.converterFactories = Collections.unmodifiableList(converterFactories);
     }
 
     public <T> T create(final Class<T> server) {
@@ -65,8 +72,8 @@ public class Retrofit {
     }
 
     private CallAdapter<?> nextCallAdapter(CallAdapter.Factory skipPast, Type returnType, Annotation[] annotations) {
-        Utils.checkNotNull(returnType, "returnType == null");
-        Utils.checkNotNull(annotations, "annotations == null");
+        checkNotNull(returnType, "returnType == null");
+        checkNotNull(annotations, "annotations == null");
         int start = adapterFactories.indexOf(skipPast) + 1;
         for (int i = start, count = adapterFactories.size(); i < count; i++) {
             CallAdapter<?> adapter = adapterFactories.get(i).get(returnType, annotations, this);
@@ -100,26 +107,103 @@ public class Retrofit {
         return baseUrl;
     }
 
+    public <T> Converter<ResponseBody, T> responseBodyConverter(Type type, Annotation[] annotations) {
+        return nextResponseBodyConverter(null, type, annotations);
+    }
+
+    public <T> Converter<ResponseBody, T> nextResponseBodyConverter(Converter.Factory skipPast,
+                Type type, Annotation[] annotations) {
+
+        checkNotNull(type, "type == null");
+        checkNotNull(annotations, "annotations == null");
+
+        int start = converterFactories.indexOf(skipPast) + 1;
+        for (int i = start, count = converterFactories.size(); i < count; i++) {
+            Converter<ResponseBody, ?> converter =
+                    converterFactories.get(i).responseBodyConverter(type, annotations, this);
+            if (converter != null) {
+                //noinspection unchecked
+                return (Converter<ResponseBody, T>) converter;
+            }
+        }
+
+        StringBuilder builder = new StringBuilder("Could not locate ResponseBody converter for ")
+                .append(type)
+                .append(".\n");
+        if (skipPast != null) {
+            builder.append("  Skipped:");
+            for (int i = 0; i < start; i++) {
+                builder.append("\n   * ").append(converterFactories.get(i).getClass().getName());
+            }
+            builder.append('\n');
+        }
+        builder.append("  Tried:");
+        for (int i = start, count = converterFactories.size(); i < count; i++) {
+            builder.append("\n   * ").append(converterFactories.get(i).getClass().getName());
+        }
+        throw new IllegalArgumentException(builder.toString());
+    }
+
+    public <T> Converter<T, RequestBody> requestBodyConverter(Type type,
+                              Annotation[] parameterAnnotations, Annotation[] methodAnnotations) {
+        return nextRequestBodyConverter(null, type, parameterAnnotations, methodAnnotations);
+    }
+
+    public <T> Converter<T, RequestBody> nextRequestBodyConverter(Converter.Factory skipPast,
+                              Type type, Annotation[] parameterAnnotations, Annotation[] methodAnnotations) {
+        checkNotNull(type, "type == null");
+        checkNotNull(parameterAnnotations, "parameterAnnotations == null");
+        checkNotNull(methodAnnotations, "methodAnnotations == null");
+
+        int start = converterFactories.indexOf(skipPast) + 1;
+        for (int i = start, count = converterFactories.size(); i < count; i++) {
+            Converter.Factory factory = converterFactories.get(i);
+            Converter<?, RequestBody> converter =
+                    factory.requestBodyConverter(type, parameterAnnotations, methodAnnotations, this);
+            if (converter != null) {
+                //noinspection unchecked
+                return (Converter<T, RequestBody>) converter;
+            }
+        }
+
+        StringBuilder builder = new StringBuilder("Could not locate RequestBody converter for ")
+                .append(type)
+                .append(".\n");
+        if (skipPast != null) {
+            builder.append("  Skipped:");
+            for (int i = 0; i < start; i++) {
+                builder.append("\n   * ").append(converterFactories.get(i).getClass().getName());
+            }
+            builder.append('\n');
+        }
+        builder.append("  Tried:");
+        for (int i = start, count = converterFactories.size(); i < count; i++) {
+            builder.append("\n   * ").append(converterFactories.get(i).getClass().getName());
+        }
+        throw new IllegalArgumentException(builder.toString());
+    }
+
     public static final class Builder {
         private okhttp3.Call.Factory callFactory;
         private HttpUrl baseUrl;
         private List<CallAdapter.Factory> adapterFactories = new ArrayList<>();
+        private List<Converter.Factory> converterFactories = new ArrayList<>();
 
         public Builder() {
 
         }
 
         public Builder client(OkHttpClient client) {
-            return callFactory(Utils.checkNotNull(client, "client == null"));
+            return callFactory(checkNotNull(client, "client == null"));
         }
 
         public Builder callFactory(okhttp3.Call.Factory factory) {
-            this.callFactory = Utils.checkNotNull(factory, "factory == null");
+            this.callFactory = checkNotNull(factory, "factory == null");
             return this;
         }
 
         public Builder baseUrl(String baseUrl) {
-            Utils.checkNotNull(baseUrl, "baseUrl == null");
+            checkNotNull(baseUrl, "baseUrl == null");
             HttpUrl httpUrl = HttpUrl.parse(baseUrl);
             if (httpUrl == null) {
                 throw new IllegalArgumentException("Illegal URL: " + baseUrl);
@@ -128,7 +212,7 @@ public class Retrofit {
         }
 
         public Builder baseUrl(HttpUrl baseUrl) {
-            Utils.checkNotNull(baseUrl, "baseUrl == null");
+            checkNotNull(baseUrl, "baseUrl == null");
             List<String> pathSegments = baseUrl.pathSegments();
             if (!"".equals(pathSegments.get(pathSegments.size() - 1))) {
                 throw new IllegalArgumentException("baseUrl must end in /: " + baseUrl);
@@ -139,7 +223,12 @@ public class Retrofit {
         }
 
         public Builder addCallAdapterFactory(CallAdapter.Factory factory) {
-            adapterFactories.add(Utils.checkNotNull(factory, "factory == null"));
+            adapterFactories.add(checkNotNull(factory, "factory == null"));
+            return this;
+        }
+
+        public Builder addConverterFactory(Converter.Factory factory) {
+            converterFactories.add(checkNotNull(factory, "factory == null"));
             return this;
         }
 
@@ -156,7 +245,9 @@ public class Retrofit {
             List<CallAdapter.Factory> adapterFactories = new ArrayList<>(this.adapterFactories);
             adapterFactories.add(new DefaultCallAdapterFactory());
 
-            return new Retrofit(callFactory, baseUrl, adapterFactories);
+            List<Converter.Factory> converterFactories = new ArrayList<>(this.converterFactories);
+
+            return new Retrofit(callFactory, baseUrl, adapterFactories, converterFactories);
         }
     }
 }

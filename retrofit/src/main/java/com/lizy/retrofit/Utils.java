@@ -1,11 +1,15 @@
 package com.lizy.retrofit;
 
+import java.io.IOException;
 import java.lang.reflect.Array;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
+
+import okhttp3.ResponseBody;
+import okio.Buffer;
 
 /**
  * Created by lizy on 16-8-26.
@@ -124,6 +128,12 @@ public class Utils {
             throw new NullPointerException(message);
         }
         return object;
+    }
+
+    static ResponseBody buffer(ResponseBody body) throws IOException {
+        Buffer buffer = new Buffer();
+        body.source().readAll(buffer);
+        return ResponseBody.create(body.contentType(), body.contentLength(), buffer);
     }
 }
 

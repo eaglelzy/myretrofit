@@ -1,1 +1,5 @@
-include ':app', ':retrofit-adapters', ':retrofit-mock', ':retrofit-converters','retrofit'
+include ':app',
+        ':retrofit-adapters',
+        ':retrofit-mock',
+        'retrofit',
+        ':retrofit-converters:gson'
